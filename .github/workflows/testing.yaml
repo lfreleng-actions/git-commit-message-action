@@ -3,15 +3,15 @@
 # SPDX-FileCopyrightText: 2025 The Linux Foundation
 
 # Action test/validation workflow
-name: "Test GitHub Action 🧪"
+name: 'Test GitHub Action 🧪'
 
 # yamllint disable-line rule:truthy
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ['main']
   pull_request:
-    branches: ["main"]
+    branches: ['main']
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -22,54 +22,181 @@ permissions: {}
 jobs:
   ### Test the GitHub Action in this Repository ###
   tests:
-    name: "Test local GitHub Action"
+    name: 'Test local GitHub Action'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    timeout-minutes: 10 # Increase this timeout value as needed
+    timeout-minutes: 10
     steps:
       # Harden the runner used by this workflow
       # yamllint disable-line rule:line-length
       - uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        name: 'Harden runner'
         with:
           egress-policy: audit
 
-      - name: "Checkout repository"
+      - name: 'Checkout repository'
+        # yamllint disable-line rule:line-length
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 5  # Ensure we have enough commits for testing
 
-      # Perform setup prior to running test(s)
-      - name: "Testing setup step"
+      - name: 'Setup test commits'
         shell: bash
         run: |
-          # Testing setup step
-          echo "Testing setup step"
-          echo "Testing setup step/summary output" >> "$GITHUB_STEP_SUMMARY"
+          # Create test commits with different message formats
+          git config user.name 'Test User'
+          git config user.email 'test@example.com'
 
-      - name: "Running local action: ${{ github.repository }}"
+          # Create a commit with DCO and Change-Id
+          echo 'test-file-1' > test1.txt
+          git add test1.txt
+          git commit -m 'feat: Add test feature
+
+          This commit includes both DCO and Change-Id.
+
+          Change-Id: I1234567890abcdef1234567890abcdef12345678
+          Signed-off-by: Test User <test@example.com>'
+
+      - name: 'Test default behavior (latest commit)'
+        id: test_default
+        uses: ./
+
+      - name: 'Validate default test outputs'
+        shell: bash
+        run: |
+          if [ -z "${{ steps.test_default.outputs.commit_sha }}" ]; then
+            echo "❌ commit_sha is empty"
+            exit 1
+          fi
+
+          if [ -z "${{ steps.test_default.outputs.commit_message }}" ]; then
+            echo "❌ commit_message is empty"
+            exit 1
+          fi
+
+          echo "✅ Default test passed"
+          echo "SHA: ${{ steps.test_default.outputs.commit_sha }}"
+
+      - name: "Test specific commit number"
+        id: test_commit_2
         uses: ./
         with:
-          input: "test input 💬"
+          commit_number: "2"
 
-      - name: "Validated local action: ${{ github.repository }}"
+      - name: "Validate specific commit test"
         shell: bash
         run: |
-          # Local action validation
-          echo "Validated local action: ${{ github.repository }}"
-          echo "Validation step summary output" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "${{ steps.test_commit_2.outputs.commit_sha }}" ]; then
+            echo "❌ Second commit SHA is empty"
+            exit 1
+          fi
 
-      # yamllint disable-line rule:line-length
-      - name: "Running local action: ${{ github.repository }} [Override Failure]"
+          # Should be different from first commit
+          if [ "${{ steps.test_default.outputs.commit_sha }}" = \
+               "${{ steps.test_commit_2.outputs.commit_sha }}" ]; then
+            echo "❌ Commit SHAs should be different"
+            exit 1
+          fi
+
+          echo '✅ Specific commit test passed'
+
+      - name: "Test DCO and Change-Id detection"
+        shell: bash
+        run: |
+          # Test DCO detection
+          if [ "${{ steps.test_default.outputs.dco_signed_off }}" != \
+               'true' ]; then
+            echo '❌ DCO not detected in latest commit'
+            exit 1
+          fi
+
+          if [ "${{ steps.test_default.outputs.dco_name }}" != \
+               'Test User' ]; then
+            echo '❌ DCO name not extracted correctly'
+            echo 'Expected: Test User'
+            echo "Got: ${{ steps.test_default.outputs.dco_name }}"
+            exit 1
+          fi
+
+          if [ "${{ steps.test_default.outputs.dco_email }}" != \
+               'test@example.com' ]; then
+            echo '❌ DCO email not extracted correctly'
+            exit 1
+          fi
+
+          # Test Change-Id detection
+          if [ "${{ steps.test_default.outputs.change_id }}" != \
+               'true' ]; then
+            echo '❌ Change-Id not detected'
+            exit 1
+          fi
+
+          expected_change_id='I1234567890abcdef1234567890abcdef12345678'
+          if [ "${{ steps.test_default.outputs.change_id_value }}" != \
+               "$expected_change_id" ]; then
+            echo '❌ Change-Id value not extracted correctly'
+            exit 1
+          fi
+
+          echo '✅ DCO and Change-Id detection tests passed'
+
+      - name: 'Test invalid commit number (should fail)'
+        id: test_invalid
         uses: ./
-        id: failure
         continue-on-error: true
         with:
-          invalid_input: "Some garbage"
+          commit_number: 'abc'
 
-      # Failure testing is also important
-      - name: "Error if step above did NOT fail"
-        if: steps.failure.outcome == 'success'
+      - name: 'Validate error handling'
         shell: bash
         run: |
-          # Error if step above did NOT fail
-          echo "Error: previous test step did NOT fail ❌"
-          exit 1
+          if [ "${{ steps.test_invalid.outcome }}" = "success" ]; then
+            echo '❌ Action should have failed with invalid input'
+            exit 1
+          fi
+
+          echo '✅ Error handling test passed'
+
+      - name: 'Test commit without DCO or Change-Id'
+        shell: bash
+        run: |
+          # Create commit without DCO or Change-Id
+          echo 'test-file-2' > test2.txt
+          git add test2.txt
+          git commit -m 'Simple commit without DCO or Change-Id'
+
+      - name: 'Test missing DCO and Change-Id'
+        id: test_no_dco
+        uses: ./
+
+      - name: 'Validate missing DCO/Change-Id detection'
+        shell: bash
+        run: |
+          if [ "${{ steps.test_no_dco.outputs.dco_signed_off }}" != \
+               'false' ]; then
+            echo '❌ Should detect missing DCO'
+            exit 1
+          fi
+
+          if [ "${{ steps.test_no_dco.outputs.change_id }}" != \
+               'false' ]; then
+            echo '❌ Should detect missing Change-Id'
+            exit 1
+          fi
+
+          echo '✅ Missing DCO/Change-Id detection passed'
+
+      - name: 'Test summary'
+        shell: bash
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << 'EOF'
+          ## 🧪 Action Test Results
+          - ✅ Default behavior test
+          - ✅ Specific commit number test
+          - ✅ DCO and Change-Id detection
+          - ✅ Error handling test
+          - ✅ Missing DCO/Change-Id detection
+
+          All tests completed successfully! 🎉
+          EOF

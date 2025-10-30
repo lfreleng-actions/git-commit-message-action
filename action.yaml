@@ -1,37 +1,119 @@
 ---
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2025 The Linux Foundation
+# SPDX-FileCopyrightText: 2024 The Linux Foundation
 
-# actions-template
-name: "🛠️ Actions Template"
-description: "Description of action"
-# Any relevant notes/observations can go here
+name: '💬 GIT Commit Message'
+description: 'Retrieve GIT commit message and check for Change-Id and DCO'
 
 inputs:
-  input:
-    description: "Description of input"
-    required: true
+  commit_number:
+    # Starting at one, which is the last/latest commit
+    description: 'Commit position/number (1=latest, 2=second-to-last, etc.)'
+    required: false
+    default: '1'
 
 outputs:
-  output:
-    description: "Description of output"
-    value: ${{ steps.code.outputs.output }}
+  commit_sha:
+    description: 'SHA value corresponding to GIT commit number'
+    value: ${{ steps.process-commit.outputs.commit_sha }}
+  commit_message:
+    description: 'GIT commit message body'
+    value: ${{ steps.process-commit.outputs.commit_message }}
+  # See: https://gerrit-review.googlesource.com/Documentation/user-changeid.html
+  change_id:
+    description: 'Whether the commit message contains a Gerrit Change-Id'
+    value: ${{ steps.process-commit.outputs.change_id }}
+  change_id_value:
+    description: 'The extracted Change-Id value/string'
+    value: ${{ steps.process-commit.outputs.change_id_value }}
+  # See: https://en.wikipedia.org/wiki/Developer_Certificate_of_Origin
+  dco_signed_off:
+    description: 'Whether the commit message contains a DCO statement'
+    value: ${{ steps.process-commit.outputs.dco_signed_off }}
+  dco_name:
+    description: 'Name provided in DCO statement, if present'
+    value: ${{ steps.process-commit.outputs.dco_name }}
+  dco_email:
+    description: 'E-mail address from DCO statement, if present '
+    value: ${{ steps.process-commit.outputs.dco_email }}
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
-    - name: "Friendly Name"
-      id: code
+    - name: 'Retrieve GIT commit'
+      id: process-commit
       shell: bash
       run: |
-        # Friendly Name
-        input="${{ inputs.input }}"
-        if [ -z "$input" ]; then
-          echo "Error: mandatory input was not set/configured ❌"
-          exit 1
+        # Process GIT commit
+
+        COMMIT_NUMBER="${{ inputs.commit_number }}"
+        CHECK_REGEX='^[0-9]+$'
+        if ! [[ "$COMMIT_NUMBER" =~ $CHECK_REGEX ]] ; then
+           echo 'Error: commit number/input must be numeric ❌'
+           exit 1
         fi
 
-        echo "output=$input" >> "$GITHUB_ENV"
-        echo "output=$input" >> "$GITHUB_OUTPUT"
-        echo "Action received: $input ✅"
-        echo "Action received: $input ✅" >> "$GITHUB_STEP_SUMMARY"
+        COMMIT_SHA=$(git log --pretty=format:"%H" | awk "NR==$COMMIT_NUMBER")
+        COMMIT_MESSAGE=$(git log --format=%B -n 1 "$COMMIT_SHA")
+
+        CHANGE_ID_LINE=$(echo "$COMMIT_MESSAGE" | grep 'Change-Id:' || true)
+        if [ -z "$CHANGE_ID_LINE" ]; then
+          echo 'Gerrit Change-Id NOT found in commit message/body'
+          CHANGE_ID='false'
+        else
+          echo 'Gerrit Change-Id found in commit message/body'
+          CHANGE_ID='true'
+          CHANGE_ID_VALUE=$(echo "$CHANGE_ID_LINE" | awk '{ print $2 }')
+        fi
+
+        DCO_LINE=$(echo "$COMMIT_MESSAGE" | grep 'Signed-off-by:' || true)
+        if [ -z "$DCO_LINE" ]; then
+          echo 'DCO statement NOT found in commit message/body ⚠️'
+          DCO_SIGNED_OFF='false'
+        else
+          echo 'DCO statement found in commit message/body ✅'
+          DCO_SIGNED_OFF='true'
+          # Tested: https://regex101.com/r/LFOLgS/1
+          DCO_NAME=$(echo "$DCO_LINE" |\
+           grep -oP '^Signed-off-by: \K.*.+?(?= <)')
+          # Tested: https://regex101.com/r/LMK94y/1
+          DCO_EMAIL=$(echo "$DCO_LINE" |\
+           grep -oP '(?<=<).*(?=>)')
+        fi
+
+        if [ -z "$COMMIT_MESSAGE" ]; then
+          echo 'GIT commit message string was empty ⚠️'
+          echo 'Ensure checkout step was performed'
+          echo 'Ensure fetch depth covers request range'
+        fi
+
+        # Set outputs
+        echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_ENV"
+        echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+        cat >> "$GITHUB_ENV" << EOF
+        commit_message<<COMMIT_EOF
+        $COMMIT_MESSAGE
+        COMMIT_EOF
+        EOF
+        cat >> "$GITHUB_OUTPUT" << EOF
+        commit_message<<COMMIT_EOF
+        $COMMIT_MESSAGE
+        COMMIT_EOF
+        EOF
+        {
+          echo "change_id=$CHANGE_ID"
+          echo "change_id_value=$CHANGE_ID_VALUE"
+          echo "dco_signed_off=$DCO_SIGNED_OFF"
+          echo "dco_name=$DCO_NAME"
+          echo "dco_email=$DCO_EMAIL"
+        } >> "$GITHUB_ENV"
+        {
+          echo "change_id=$CHANGE_ID"
+          echo "change_id_value=$CHANGE_ID_VALUE"
+          echo "dco_signed_off=$DCO_SIGNED_OFF"
+          echo "dco_name=$DCO_NAME"
+          echo "dco_email=$DCO_EMAIL"
+        } >> "$GITHUB_OUTPUT"
+
+        echo 'GIT Commit Message 💬'
+        echo "$COMMIT_MESSAGE"

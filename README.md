@@ -27,9 +27,9 @@ signature details from the Git repository.
 
 <!-- markdownlint-disable MD013 -->
 
-| Variable Name  | Mandatory  | Default | Description                                        |
-| -------------- | -----------| ------- | -------------------------------------------------- |
-| commit_number  | False      | 1       | Commit position/number (1=latest, 2=second-to-last, etc.) |
+| Variable Name | Mandatory | Default | Description                                               |
+| ------------- | --------- | ------- | --------------------------------------------------------- |
+| commit_number | False     | 1       | Commit position/number (1=latest, 2=second-to-last, etc.) |
 
 <!-- markdownlint-enable MD013 -->
 
@@ -39,8 +39,8 @@ signature details from the Git repository.
 
 | Variable Name   | Description                                            |
 | --------------- | ------------------------------------------------------ |
-| commit_sha      | SHA hash of the requested Git commit                    |
-| commit_message  | Full commit message body of the requested commit        |
+| commit_sha      | SHA hash of the requested Git commit                   |
+| commit_message  | Full commit message body of the requested commit       |
 | change_id       | Whether the commit message contains a Gerrit Change-Id |
 | change_id_value | When Change-Id present, returns the string/value       |
 | dco_signed_off  | Whether the commit message body contains a DCO line    |

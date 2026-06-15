@@ -43,10 +43,12 @@ runs:
     - name: 'Retrieve GIT commit'
       id: process-commit
       shell: bash
+      env:
+        INPUT_COMMIT_NUMBER: ${{ inputs.commit_number }}
       run: |
         # Process GIT commit
 
-        COMMIT_NUMBER="${{ inputs.commit_number }}"
+        COMMIT_NUMBER="$INPUT_COMMIT_NUMBER"
         CHECK_REGEX='^[0-9]+$'
         if ! [[ "$COMMIT_NUMBER" =~ $CHECK_REGEX ]] ; then
            echo 'Error: commit number/input must be numeric ❌'
@@ -87,32 +89,48 @@ runs:
           echo 'Ensure fetch depth covers request range'
         fi
 
-        # Set outputs
-        echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_ENV"
-        echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
-        cat >> "$GITHUB_ENV" << EOF
-        commit_message<<COMMIT_EOF
-        $COMMIT_MESSAGE
-        COMMIT_EOF
-        EOF
-        cat >> "$GITHUB_OUTPUT" << EOF
-        commit_message<<COMMIT_EOF
-        $COMMIT_MESSAGE
-        COMMIT_EOF
-        EOF
+        # Set outputs (GITHUB_OUTPUT is the documented interface; writing
+        # commit-derived values to GITHUB_ENV is avoided as it can allow
+        # injected variables to influence later steps).
+        #
+        # The commit message is attacker-controlled, so use a random
+        # per-run heredoc delimiter: a fixed delimiter could appear as a
+        # line in the message and prematurely terminate the value,
+        # allowing additional outputs to be injected.
+        #
+        # Draw the random suffix from the first available strong source
+        # so the action does not hard-depend on any single tool, then
+        # fail fast if none are available or the value is empty (a
+        # predictable delimiter could re-enable the injection).
+        RANDOM_HEX=""
+        if command -v openssl >/dev/null 2>&1; then
+          RANDOM_HEX=$(openssl rand -hex 16)
+        elif [ -r /dev/urandom ] && command -v od >/dev/null 2>&1; then
+          RANDOM_HEX=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+        elif command -v uuidgen >/dev/null 2>&1; then
+          RANDOM_HEX=$(uuidgen | tr -d '-' | tr 'A-F' 'a-f')
+        elif command -v python3 >/dev/null 2>&1; then
+          RANDOM_HEX=$(python3 -c \
+            'import secrets; print(secrets.token_hex(16))')
+        fi
+        if [ -z "$RANDOM_HEX" ]; then
+          echo 'Error: no random source available for output delimiter ❌'
+          exit 1
+        fi
+        EOF_DELIM="COMMIT_EOF_${RANDOM_HEX}"
+        # Use printf (not echo) for output framing so values beginning
+        # with '-n'/'-e' are not misinterpreted as options, which could
+        # drop the trailing newline and corrupt the delimiter framing.
         {
-          echo "change_id=$CHANGE_ID"
-          echo "change_id_value=$CHANGE_ID_VALUE"
-          echo "dco_signed_off=$DCO_SIGNED_OFF"
-          echo "dco_name=$DCO_NAME"
-          echo "dco_email=$DCO_EMAIL"
-        } >> "$GITHUB_ENV"
-        {
-          echo "change_id=$CHANGE_ID"
-          echo "change_id_value=$CHANGE_ID_VALUE"
-          echo "dco_signed_off=$DCO_SIGNED_OFF"
-          echo "dco_name=$DCO_NAME"
-          echo "dco_email=$DCO_EMAIL"
+          printf 'commit_sha=%s\n' "$COMMIT_SHA"
+          printf 'commit_message<<%s\n' "$EOF_DELIM"
+          printf '%s\n' "$COMMIT_MESSAGE"
+          printf '%s\n' "$EOF_DELIM"
+          printf 'change_id=%s\n' "$CHANGE_ID"
+          printf 'change_id_value=%s\n' "$CHANGE_ID_VALUE"
+          printf 'dco_signed_off=%s\n' "$DCO_SIGNED_OFF"
+          printf 'dco_name=%s\n' "$DCO_NAME"
+          printf 'dco_email=%s\n' "$DCO_EMAIL"
         } >> "$GITHUB_OUTPUT"
 
         echo 'GIT Commit Message 💬'

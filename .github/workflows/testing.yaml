@@ -71,18 +71,23 @@ jobs:
       - name: 'Validate default test outputs'
         shell: bash
         run: |
-          if [ -z "${{ steps.test_default.outputs.commit_sha }}" ]; then
+          if [ -z "${STEPS_TEST_DEFAULT_OUTPUTS_COMMIT_SHA}" ]; then
             echo "❌ commit_sha is empty"
             exit 1
           fi
 
-          if [ -z "${{ steps.test_default.outputs.commit_message }}" ]; then
+          if [ -z "${STEPS_TEST_DEFAULT_OUTPUTS_COMMIT_MESSAGE}" ]; then
             echo "❌ commit_message is empty"
             exit 1
           fi
 
           echo "✅ Default test passed"
-          echo "SHA: ${{ steps.test_default.outputs.commit_sha }}"
+          echo "SHA: ${STEPS_TEST_DEFAULT_OUTPUTS_COMMIT_SHA}"
+        env:
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_DEFAULT_OUTPUTS_COMMIT_SHA: ${{ steps.test_default.outputs.commit_sha }}
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_DEFAULT_OUTPUTS_COMMIT_MESSAGE: ${{ steps.test_default.outputs.commit_message }}
 
       - name: "Test specific commit number"
         id: test_commit_2
@@ -93,59 +98,75 @@ jobs:
       - name: "Validate specific commit test"
         shell: bash
         run: |
-          if [ -z "${{ steps.test_commit_2.outputs.commit_sha }}" ]; then
+          if [ -z "${STEPS_TEST_COMMIT_2_OUTPUTS_COMMIT_SHA}" ]; then
             echo "❌ Second commit SHA is empty"
             exit 1
           fi
 
           # Should be different from first commit
-          if [ "${{ steps.test_default.outputs.commit_sha }}" = \
-               "${{ steps.test_commit_2.outputs.commit_sha }}" ]; then
+          if [ "${STEPS_TEST_DEFAULT_OUTPUTS_COMMIT_SHA}" = \
+               "${STEPS_TEST_COMMIT_2_OUTPUTS_COMMIT_SHA}" ]; then
             echo "❌ Commit SHAs should be different"
             exit 1
           fi
 
           echo '✅ Specific commit test passed'
+        env:
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_COMMIT_2_OUTPUTS_COMMIT_SHA: ${{ steps.test_commit_2.outputs.commit_sha }}
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_DEFAULT_OUTPUTS_COMMIT_SHA: ${{ steps.test_default.outputs.commit_sha }}
 
       - name: "Test DCO and Change-Id detection"
         shell: bash
         run: |
           # Test DCO detection
-          if [ "${{ steps.test_default.outputs.dco_signed_off }}" != \
+          if [ "${STEPS_TEST_DEFAULT_OUTPUTS_DCO_SIGNED_OFF}" != \
                'true' ]; then
             echo '❌ DCO not detected in latest commit'
             exit 1
           fi
 
-          if [ "${{ steps.test_default.outputs.dco_name }}" != \
+          if [ "${STEPS_TEST_DEFAULT_OUTPUTS_DCO_NAME}" != \
                'Test User' ]; then
             echo '❌ DCO name not extracted correctly'
             echo 'Expected: Test User'
-            echo "Got: ${{ steps.test_default.outputs.dco_name }}"
+            echo "Got: ${STEPS_TEST_DEFAULT_OUTPUTS_DCO_NAME}"
             exit 1
           fi
 
-          if [ "${{ steps.test_default.outputs.dco_email }}" != \
+          if [ "${STEPS_TEST_DEFAULT_OUTPUTS_DCO_EMAIL}" != \
                'test@example.com' ]; then
             echo '❌ DCO email not extracted correctly'
             exit 1
           fi
 
           # Test Change-Id detection
-          if [ "${{ steps.test_default.outputs.change_id }}" != \
+          if [ "${STEPS_TEST_DEFAULT_OUTPUTS_CHANGE_ID}" != \
                'true' ]; then
             echo '❌ Change-Id not detected'
             exit 1
           fi
 
           expected_change_id='I1234567890abcdef1234567890abcdef12345678'
-          if [ "${{ steps.test_default.outputs.change_id_value }}" != \
+          if [ "${STEPS_TEST_DEFAULT_OUTPUTS_CHANGE_ID_VALUE}" != \
                "$expected_change_id" ]; then
             echo '❌ Change-Id value not extracted correctly'
             exit 1
           fi
 
           echo '✅ DCO and Change-Id detection tests passed'
+        env:
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_DEFAULT_OUTPUTS_DCO_SIGNED_OFF: ${{ steps.test_default.outputs.dco_signed_off }}
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_DEFAULT_OUTPUTS_DCO_NAME: ${{ steps.test_default.outputs.dco_name }}
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_DEFAULT_OUTPUTS_DCO_EMAIL: ${{ steps.test_default.outputs.dco_email }}
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_DEFAULT_OUTPUTS_CHANGE_ID: ${{ steps.test_default.outputs.change_id }}
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_DEFAULT_OUTPUTS_CHANGE_ID_VALUE: ${{ steps.test_default.outputs.change_id_value }}
 
       - name: 'Test invalid commit number (should fail)'
         id: test_invalid
@@ -157,12 +178,14 @@ jobs:
       - name: 'Validate error handling'
         shell: bash
         run: |
-          if [ "${{ steps.test_invalid.outcome }}" = "success" ]; then
+          if [ "${STEPS_TEST_INVALID_OUTCOME}" = "success" ]; then
             echo '❌ Action should have failed with invalid input'
             exit 1
           fi
 
           echo '✅ Error handling test passed'
+        env:
+          STEPS_TEST_INVALID_OUTCOME: ${{ steps.test_invalid.outcome }}
 
       - name: 'Test commit without DCO or Change-Id'
         shell: bash
@@ -179,19 +202,24 @@ jobs:
       - name: 'Validate missing DCO/Change-Id detection'
         shell: bash
         run: |
-          if [ "${{ steps.test_no_dco.outputs.dco_signed_off }}" != \
+          if [ "${STEPS_TEST_NO_DCO_OUTPUTS_DCO_SIGNED_OFF}" != \
                'false' ]; then
             echo '❌ Should detect missing DCO'
             exit 1
           fi
 
-          if [ "${{ steps.test_no_dco.outputs.change_id }}" != \
+          if [ "${STEPS_TEST_NO_DCO_OUTPUTS_CHANGE_ID}" != \
                'false' ]; then
             echo '❌ Should detect missing Change-Id'
             exit 1
           fi
 
           echo '✅ Missing DCO/Change-Id detection passed'
+        env:
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_NO_DCO_OUTPUTS_DCO_SIGNED_OFF: ${{ steps.test_no_dco.outputs.dco_signed_off }}
+          # yamllint disable-line rule:line-length
+          STEPS_TEST_NO_DCO_OUTPUTS_CHANGE_ID: ${{ steps.test_no_dco.outputs.change_id }}
 
       - name: 'Test summary'
         shell: bash

@@ -66,7 +66,7 @@ jobs:
 
       - name: 'Test default behavior (latest commit)'
         id: test_default
-        uses: ./
+        uses: $/
 
       - name: 'Validate default test outputs'
         shell: bash
@@ -91,7 +91,7 @@ jobs:
 
       - name: "Test specific commit number"
         id: test_commit_2
-        uses: ./
+        uses: $/
         with:
           commit_number: "2"
 
@@ -170,7 +170,7 @@ jobs:
 
       - name: 'Test invalid commit number (should fail)'
         id: test_invalid
-        uses: ./
+        uses: $/
         continue-on-error: true
         with:
           commit_number: 'abc'
@@ -197,7 +197,7 @@ jobs:
 
       - name: 'Test missing DCO and Change-Id'
         id: test_no_dco
-        uses: ./
+        uses: $/
 
       - name: 'Validate missing DCO/Change-Id detection'
         shell: bash

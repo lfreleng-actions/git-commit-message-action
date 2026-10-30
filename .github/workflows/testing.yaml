@@ -221,6 +221,71 @@ jobs:
           # yamllint disable-line rule:line-length
           STEPS_TEST_NO_DCO_OUTPUTS_CHANGE_ID: ${{ steps.test_no_dco.outputs.change_id }}
 
+      # The python3 fallback for the output delimiter runs only when
+      # openssl, od and uuidgen are all missing. Give the action a PATH
+      # without them, and a secrets.py in the workspace that must not
+      # load; the python3 wrapper records each call to show it ran.
+      - name: 'Prepare a PATH without openssl, od and uuidgen'
+        id: limited_path
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin_dir="${RUNNER_TEMP}/limited-bin"
+          mkdir -p "${bin_dir}"
+          for tool in bash git awk grep tr; do
+            ln -s "$(command -v "${tool}")" "${bin_dir}/${tool}"
+          done
+          cat > "${bin_dir}/python3" <<EOF
+          #!/bin/sh
+          echo "\$*" >> "${RUNNER_TEMP}/python3-calls"
+          exec "$(command -v python3)" "\$@"
+          EOF
+          chmod +x "${bin_dir}/python3"
+          planted='import os
+          import sys
+
+          marker = os.path.join(os.environ["RUNNER_TEMP"], "planted-ran")
+          with open(marker, "a") as handle:
+              handle.write(__name__ + "\n")
+          sys.exit(97)
+          '
+          printf '%s' "${planted}" > secrets.py
+          echo "path=${bin_dir}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Test python3 fallback for the output delimiter'
+        id: test_python_fallback
+        uses: $/
+        env:
+          PATH: ${{ steps.limited_path.outputs.path }}
+
+      - name: 'Validate python3 fallback'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -s "${RUNNER_TEMP}/python3-calls" ]; then
+            echo '❌ The python3 fallback did not run'
+            exit 1
+          fi
+          cat "${RUNNER_TEMP}/python3-calls"
+          if [ -e "${RUNNER_TEMP}/planted-ran" ]; then
+            echo '❌ The fallback imported secrets.py from the workspace'
+            exit 1
+          fi
+          if [ "${COMMIT_SHA}" != "${EXPECTED_SHA}" ] || \
+             [ "${COMMIT_MESSAGE}" != \
+               'Simple commit without DCO or Change-Id' ]; then
+            echo '❌ Unexpected outputs from the python3 fallback run'
+            exit 1
+          fi
+          rm -f secrets.py
+          echo '✅ python3 fallback test passed'
+        env:
+          # yamllint disable-line rule:line-length
+          COMMIT_SHA: ${{ steps.test_python_fallback.outputs.commit_sha }}
+          # yamllint disable-line rule:line-length
+          COMMIT_MESSAGE: ${{ steps.test_python_fallback.outputs.commit_message }}
+          EXPECTED_SHA: ${{ steps.test_no_dco.outputs.commit_sha }}
+
       - name: 'Test summary'
         shell: bash
         run: |
@@ -231,6 +296,7 @@ jobs:
           - ✅ DCO and Change-Id detection
           - ✅ Error handling test
           - ✅ Missing DCO/Change-Id detection
+          - ✅ python3 fallback for the output delimiter
 
           All tests completed successfully! 🎉
           EOF

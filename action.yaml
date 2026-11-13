@@ -109,10 +109,6 @@ runs:
           RANDOM_HEX=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
         elif command -v uuidgen >/dev/null 2>&1; then
           RANDOM_HEX=$(uuidgen | tr -d '-' | tr 'A-F' 'a-f')
-        elif command -v python3 >/dev/null 2>&1; then
-          # -I keeps the working directory (the checkout) off sys.path
-          RANDOM_HEX=$(python3 -I -c \
-            'import secrets; print(secrets.token_hex(16))')
         fi
         if [ -z "$RANDOM_HEX" ]; then
           echo 'Error: no random source available for output delimiter ❌'
